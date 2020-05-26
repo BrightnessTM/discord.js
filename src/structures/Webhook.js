@@ -164,6 +164,77 @@ class Webhook {
         return channel.messages.add(d, false);
       });
   }
+  
+  /**
+   * Sends a message with this webhook with an authorization header.
+   * @param {StringResolvable|APIMessage} [content=''] The content to send
+   * @param {WebhookMessageOptions|MessageAdditions} [options={}] The options to provide
+   * @returns {Promise<Message|Object>}
+   * @example
+   * // Send a basic message
+   * webhook.sendAuth('hello!')
+   *   .then(message => console.log(`Sent message: ${message.content}`))
+   *   .catch(console.error);
+   * @example
+   * // Send a remote file
+   * webhook.sendAuth({
+   *   files: ['https://cdn.discordapp.com/icons/222078108977594368/6e1019b3179d71046e463a75915e7244.png?size=2048']
+   * })
+   *   .then(console.log)
+   *   .catch(console.error);
+   * @example
+   * // Send a local file
+   * webhook.sendAuth({
+   *   files: [{
+   *     attachment: 'entire/path/to/file.jpg',
+   *     name: 'file.jpg'
+   *   }]
+   * })
+   *   .then(console.log)
+   *   .catch(console.error);
+   * @example
+   * // Send an embed with a local image inside
+   * webhook.sendAuth('This is an embed', {
+   *   embeds: [{
+   *     thumbnail: {
+   *          url: 'attachment://file.jpg'
+   *       }
+   *    }],
+   *    files: [{
+   *       attachment: 'entire/path/to/file.jpg',
+   *       name: 'file.jpg'
+   *    }]
+   * })
+   *   .then(console.log)
+   *   .catch(console.error);
+   */
+  async sendAuth(content, options) {
+    let apiMessage;
+
+    if (content instanceof APIMessage) {
+      apiMessage = content.resolveData();
+    } else {
+      apiMessage = APIMessage.create(this, content, options).resolveData();
+      if (Array.isArray(apiMessage.data.content)) {
+        return Promise.all(apiMessage.split().map(this.send.bind(this)));
+      }
+    }
+
+    const { data, files } = await apiMessage.resolveFiles();
+    return this.client.api
+      .webhooks(this.id, this.token)
+      .post({
+        data,
+        files,
+        query: { wait: true },
+        auth: true,
+      })
+      .then(d => {
+        const channel = this.client.channels ? this.client.channels.cache.get(d.channel_id) : undefined;
+        if (!channel) return d;
+        return channel.messages.add(d, false);
+      });
+  }
 
   /**
    * Sends a raw slack message with this webhook.
